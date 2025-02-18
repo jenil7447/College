@@ -1,0 +1,399 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:flutterbasic/Matrimonial_2/crud.dart';
+import 'package:flutterbasic/Matrimonial_2/animations_utils.dart';
+import 'package:flutterbasic/Matrimonial_2/database.dart';
+
+class AddProfileScreen extends StatefulWidget {
+  final Map<String, dynamic>? userData;
+  final int? userId;
+
+  AddProfileScreen({this.userData, this.userId});
+
+  @override
+  _AddProfileScreenState createState() => _AddProfileScreenState();
+}
+
+class _AddProfileScreenState extends State<AddProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final DBHelper _dbHelper = DBHelper.getInstance;
+  final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _mobileController = TextEditingController();
+
+  String? _selectedCity;
+  String? _selectedGender;
+  String? _nameError;
+  String? _emailError;
+  String? _mobileError;
+  String? _dobError;
+  String? _genderError;
+  String? _hobbiesError;
+  String? _cityError;
+
+  List<String> _selectedHobbies = [];
+  final List<String> _hobbies = ['Reading', 'Traveling', 'Music', 'Sports'];
+  final List<String> _cities = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Miami'];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.userData != null) {
+      _nameController.text = widget.userData!["fullName"];
+      _emailController.text = widget.userData!["email"];
+      _mobileController.text = widget.userData!["mobile"];
+      _dobController.text = widget.userData!["dob"];
+      _selectedCity = widget.userData!["city"];
+      _selectedGender = widget.userData!["gender"];
+      _selectedHobbies = List<String>.from(widget.userData!["hobbies"]);
+    }
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon, String? errorText) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0)),
+      errorText: errorText,
+    );
+  }
+
+  void _validateName(String value) {
+    setState(() {
+      _nameError = RegExp(r"^[a-zA-Z\s'-]{3,50}$").hasMatch(value)
+          ? null
+          : "Enter a valid full name (3-50 characters, alphabets only)";
+    });
+  }
+
+  void _validateEmail(String value) {
+    setState(() {
+      _emailError = RegExp(r"^[a-zA-Z0-9.%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").hasMatch(value)
+          ? null
+          : "Enter a valid email address";
+    });
+  }
+
+  void _validateMobile(String value) {
+    setState(() {
+      _mobileError = RegExp(r"^\+?[0-9]{10,15}$").hasMatch(value)
+          ? null
+          : "Enter a valid 10-digit mobile number";
+    });
+  }
+
+  void _validateDOB() {
+    setState(() {
+      if (_dobController.text.isNotEmpty) {
+        DateTime? dob = DateFormat('dd/MM/yyyy').parse(_dobController.text, true);
+        DateTime now = DateTime.now();
+        int age = now.year - dob.year;
+        if (dob.month > now.month || (dob.month == now.month && dob.day > now.day)) {
+          age--;
+        }
+        _dobError = (age >= 18 && age <= 80) ? null : "You must be at least 18 years old to register";
+      } else {
+        _dobError = "Date of Birth is required";
+      }
+    });
+  }
+
+  void _validateGender() {
+    setState(() {
+      _genderError = _selectedGender == null ? "Please select your gender" : null;
+    });
+  }
+
+  void _validateHobbies() {
+    setState(() {
+      _hobbiesError = _selectedHobbies.isEmpty ? "Select at least one hobby" : null;
+    });
+  }
+
+  void _validateCity() {
+    setState(() {
+      _cityError = _selectedCity == null ? "Please select a city" : null;
+    });
+  }
+
+  bool _validateForm() {
+    _validateName(_nameController.text);
+    _validateEmail(_emailController.text);
+    _validateMobile(_mobileController.text);
+    _validateDOB();
+    _validateGender();
+    _validateHobbies();
+    _validateCity();
+
+    return _nameError == null &&
+        _emailError == null &&
+        _mobileError == null &&
+        _dobError == null &&
+        _genderError == null &&
+        _hobbiesError == null &&
+        _cityError == null;
+  }
+
+
+
+  void _submitForm() async {
+    if (_validateForm()) {
+      if (_formKey.currentState!.validate()) {
+        // Convert form data to match database structure
+        Map<String, dynamic> userData = {
+          'firstName': _nameController.text,
+          'email': _emailController.text,
+          'mobile': _mobileController.text,
+          'dob': _dobController.text,
+          'age': _calculateAge(_dobController.text),
+          'city': _selectedCity!,
+          'gender': _selectedGender == "Male" ? 1 : 2,
+          'hobbies': _selectedHobbies,
+          'isFavorite': 0
+        };
+
+        bool isSuccess = false;
+        if (widget.userId != null) {
+          // Update existing user
+          int result = await _dbHelper.updateUser(widget.userId!, userData);
+          isSuccess = result > 0;
+        } else {
+          // Insert new user
+          int result = await _dbHelper.insertUser(user: userData);
+          isSuccess = result > 0;
+        }
+
+        if (isSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.userId != null ? 'User updated successfully!' : 'User added successfully!')),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to save user. Please try again.')),
+          );
+        }
+      }
+    }
+  }
+  int _calculateAge(String birthDateString) {
+    DateTime birthDate = DateFormat('dd/MM/yyyy').parse(birthDateString);
+    DateTime today = DateTime.now();
+    int age = today.year - birthDate.year;
+    if (today.month < birthDate.month ||
+        (today.month == birthDate.month && today.day < birthDate.day)) {
+      age--;
+    }
+    return age;
+  }
+  // Your existing build method stays the same
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Add Profile'),
+        elevation: 0,
+        backgroundColor: Theme.of(context).primaryColor,
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).primaryColor.withOpacity(0.1),
+              Colors.white,
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
+          physics: BouncingScrollPhysics(),
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AnimatedFormField(
+                    index: 0,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: TextFormField(
+                          textCapitalization: TextCapitalization.words,
+                          controller: _nameController,
+                          decoration: _inputDecoration('Full Name', Icons.person, _nameError),
+                          keyboardType: TextInputType.name,
+                          onChanged: _validateName,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 1,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: TextFormField(
+                          controller: _emailController,
+                          decoration: _inputDecoration('Email Address', Icons.email, _emailError),
+                          keyboardType: TextInputType.emailAddress,
+                          onChanged: _validateEmail,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 2,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: TextFormField(
+                          controller: _mobileController,
+                          decoration: _inputDecoration('Mobile Number', Icons.phone, _mobileError),
+                          keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          onChanged: _validateMobile,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 3,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: TextFormField(
+                          controller: _dobController,
+                          decoration: _inputDecoration('Date of Birth', Icons.calendar_today, _dobError),
+                          readOnly: true,
+                          onTap: () async {
+                            DateTime? pickedDate = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now().subtract(Duration(days: 366 * 18)),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                            );
+
+                            if (pickedDate != null) {
+                              _dobController.text = DateFormat('dd/MM/yyyy').format(pickedDate);
+                            }
+                            _validateDOB();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 4,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: DropdownButtonFormField<String>(
+                          decoration: _inputDecoration('Select City', Icons.location_city, _cityError),
+                          value: _selectedCity,
+                          items: _cities.map((city) {
+                            return DropdownMenuItem(value: city, child: Text(city));
+                          }).toList(),
+                          onChanged: (value) => setState(() => _selectedCity = value),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 5,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Gender:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Row(
+                              children: [
+                                Radio(
+                                  value: "Male",
+                                  groupValue: _selectedGender,
+                                  onChanged: (value) => setState(() => _selectedGender = value.toString()),
+                                ),
+                                Text("Male"),
+                                Radio(
+                                  value: "Female",
+                                  groupValue: _selectedGender,
+                                  onChanged: (value) => setState(() => _selectedGender = value.toString()),
+                                ),
+                                Text("Female"),
+                              ],
+                            ),
+                            if (_genderError != null)
+                              Text(_genderError!, style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+
+                  AnimatedFormField(
+                    index: 6,
+                    child: CustomCardWrapper(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Hobbies:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 8.0,
+                              children: _hobbies.map((hobby) {
+                                return ChoiceChip(
+                                  label: Text(hobby),
+                                  selected: _selectedHobbies.contains(hobby),
+                                  onSelected: (selected) => setState(() =>
+                                  selected ? _selectedHobbies.add(hobby) : _selectedHobbies.remove(hobby)),
+                                );
+                              }).toList(),
+                            ),
+                            if (_hobbiesError != null)
+                              Text(_hobbiesError!, style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+
+                  AnimatedFormField(
+                    index: 7,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: SubmitButton(
+                        onPressed: _submitForm,
+                        text: widget.userId != null ? 'Update Profile' : 'Create Profile',
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
